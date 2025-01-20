@@ -1,0 +1,6 @@
+[submodule "colcon_ws/src/urg_node2"]
+	path = colcon_ws/src/urg_node2
+	url = https://github.com/Hokuyo-aut/urg_node2.git
+[submodule "colcon_ws/src/CoRE_AutoRobot_2024_sample"]
+	path = colcon_ws/src/CoRE_AutoRobot_2024_sample
+	url = https://github.com/scramble-robot/CoRE_AutoRobot_2024_sample.git
