@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.3.1-devel-ubuntu22.04
+FROM nvidia/cuda:12.6.3-devel-ubuntu22.04
 ENV NVIDIA_VISIBLE_DEVICES ${NVIDIA_VISIBLE_DEVICES:-all}
 ENV NVIDIA_DRIVER_CAPABILITIES ${NVIDIA_DRIVER_CAPABILITIES:+$NVIDIA_DRIVER_CAPABILITIES,}graphics
 RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
@@ -58,16 +58,16 @@ RUN apt-get update && apt-get install -q -y --no-install-recommends \
 
 RUN set -x && \
   pip3 install -U pip && \
-  pip3 install pyserial numpy scipy
+  pip3 install pyserial numpy==1.26.4 scipy
 
 # for opencv with cuda
 RUN cd /opt && \
   git clone https://github.com/opencv/opencv.git && \
   git clone https://github.com/opencv/opencv_contrib.git && \
-  cd opencv; git checkout -b 4.5.0 && \
-  cd ../opencv_contrib; git checkout -b 4.5.0 && \
+  cd opencv; git checkout -b 4.11.0 && \
+  cd ../opencv_contrib; git checkout -b 4.11.0 && \
   cd ../opencv && mkdir build && cd build/ && \
-  CUDA_PATH="/usr/local/cuda-11" CFLAGS="-I/usr/local/cuda-11/include" LDFLAGS="-L/usr/local/cuda-11/lib64" \
+  CUDA_PATH="/usr/local/cuda-12" CFLAGS="-I/usr/local/cuda-12/include" LDFLAGS="-L/usr/local/cuda-12/lib64" \
   cmake .. -D CMAKE_BUILD_TYPE=RELEASE \
   -D BUILD_opencv_world=OFF \
   -D BUILD_opencv_apps=ON \
@@ -100,7 +100,7 @@ RUN cd /opt && \
 
 # for realsense
 RUN cd /opt && \
-  git clone https://github.com/IntelRealSense/librealsense.git -b v2.54.1 && \
+  git clone https://github.com/IntelRealSense/librealsense.git -b v2.56.3 && \
   cd librealsense && \
   #./scripts/patch-realsense-ubuntu-L4T.sh  && \
   mkdir build && cd build && \
@@ -108,8 +108,9 @@ RUN cd /opt && \
   make -j8 && \
   make install
 
-RUN apt update && apt install -qq -y ros-humble-realsense2-* ros-humble-laser-proc
-RUN pip3 install pyusb
+RUN apt update && apt install -qq -y ros-humble-realsense2-* ros-humble-laser-proc ros-humble-joy-linux
+RUN pip3 install sympy --ignore-installed
+RUN pip3 install pyusb ultralytics
 RUN echo 'source /root/colcon_ws/install/setup.sh' >> ~/.bashrc
 
 COPY config/99-realsense-libusb.rules /etc/udev/rules.d/
