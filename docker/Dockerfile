@@ -110,7 +110,7 @@ RUN cd /opt && \
 
 RUN apt update && apt install -qq -y ros-humble-realsense2-* ros-humble-laser-proc ros-humble-joy-linux
 RUN pip3 install sympy --ignore-installed
-RUN pip3 install pyusb ultralytics
+RUN pip3 install pyusb ultralytics numba
 RUN echo 'source /root/colcon_ws/install/setup.sh' >> ~/.bashrc
 
 COPY config/99-realsense-libusb.rules /etc/udev/rules.d/
