@@ -20,10 +20,16 @@ def generate_launch_description():
                 PythonLaunchDescriptionSource([os.path.join(
                     get_package_share_directory('corejp_autorobot_launcher'), 'launch'), '/rs_launch.py']),
             )
+
+    urg_launch = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([os.path.join(
+                    get_package_share_directory('corejp_autorobot_launcher'), 'launch'), '/urg_node2.launch.py']),
+            )
+
     controller_launch = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([
                     PathJoinSubstitution([
-                        FindPackageShare('corejp_sample_controller'),
+                        FindPackageShare('tkg_autorobot_controller'),
                         'launch',
                         'controller.launch.py'
                     ])
@@ -55,6 +61,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         rs_launch,
+        urg_launch,
         controller_launch,
         #rviz,
     ])
