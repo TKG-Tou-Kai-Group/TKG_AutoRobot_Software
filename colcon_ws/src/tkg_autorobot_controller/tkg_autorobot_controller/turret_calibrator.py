@@ -32,7 +32,7 @@ class Turret(Node):
             depth=10,
             reliability=ReliabilityPolicy.BEST_EFFORT
         )
-        self.subscription_imu = self.create_subscription(Imu, '/front_camera/front_camera/imu', self.callback_imu, qos_profile)
+        self.subscription_imu = self.create_subscription(Imu, '/camera/camera/imu', self.callback_imu, qos_profile)
 
         self.yaw_right = False
         self.yaw_left = False

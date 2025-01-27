@@ -71,11 +71,11 @@ def reset_realsense_devices_with_retry(n_retry=5):
 
     return True
 
-configurable_parameters = [{'name': 'camera_name_front',                  'default': 'front_camera', 'description': 'camera unique name'},
-                           {'name': 'camera_namespace_front',             'default': 'front_camera', 'description': 'namespace for camera'},
+configurable_parameters = [{'name': 'camera_name_front',                  'default': 'camera', 'description': 'camera unique name'},
+                           {'name': 'camera_namespace_front',             'default': '', 'description': 'namespace for camera'},
                            {'name': 'serial_no_front',                    'default': "'311322304903'", 'description': 'choose device by serial number'},
                            {'name': 'config_file_front',                  'default': "''", 'description': 'yaml config file'},
-                           {'name': 'frame_id_front',                  'default': "'front_camera'", 'description': 'yaml config file'},
+                           {'name': 'frame_id_front',                  'default': "'camera'", 'description': 'yaml config file'},
                            {'name': 'log_level_front',                    'default': 'info', 'description': 'debug log level [DEBUG|INFO|WARN|ERROR|FATAL]'},
                            {'name': 'initial_reset',                'default': 'false', 'description': "''"},
                            {'name': 'accelerate_with_gpu',          'default': "1", 'description': '[0-No_GPU, 1-GL_GPU]'},
@@ -84,7 +84,7 @@ configurable_parameters = [{'name': 'camera_name_front',                  'defau
                            {'name': 'output_back',                       'default': 'screen', 'description': 'pipe node output [screen|log]'},
                            {'name': 'output_right',                       'default': 'screen', 'description': 'pipe node output [screen|log]'},
                            {'name': 'enable_color',                 'default': 'true', 'description': 'enable color stream'},
-                           {'name': 'rgb_camera.profile',           'default': '848,480,15', 'description': 'color image width'},
+                           {'name': 'rgb_camera.profile',           'default': '1280,720,5', 'description': 'color image width'},
                            {'name': 'rgb_camera.color_format',      'default': 'RGB8', 'description': 'color stream format'},
                            {'name': 'rgb_camera.enable_auto_exposure', 'default': 'true', 'description': 'enable/disable auto exposure for color image'},
                            {'name': 'enable_depth',                 'default': 'true', 'description': 'enable depth stream'},
@@ -160,7 +160,7 @@ def launch_setup(context, params, param_name_suffix=''):
         actions=[
         launch_ros.actions.Node(
             package='realsense2_camera',
-            namespace=LaunchConfiguration('camera_namespace' + param_name_suffix),
+            #namespace=LaunchConfiguration('camera_namespace' + param_name_suffix),
             name=LaunchConfiguration('camera_name' + param_name_suffix),
             executable='realsense2_camera_node',
             parameters=[params, params_from_file],
