@@ -51,11 +51,11 @@ def cluster_points(ranges, angle_min, angle_increment):
         b_y = initial_clusters[i][1]
         b_r = initial_clusters[i][2]
         cluster_size = a_r + b_r + math.sqrt((a_x - b_x) ** 2 + (a_y - b_y) ** 2)
-        if cluster_size >= 1.0 or i == len(initial_clusters)-1:
+        if cluster_size >= 1.2 or i == len(initial_clusters)-1:
             cluster_x = (a_x + b_x) / 2.0
             cluster_y = (a_y + b_y) / 2.0
             cluster_radius = (a_r + b_r + math.sqrt((a_x - b_x) ** 2 + (a_y - b_y) ** 2)) / 2.0
-            if cluster_radius <= 0.5:
+            if cluster_radius <= 0.6:
                 clusters.append([cluster_x, cluster_y, cluster_radius])
             current_i = i
 
@@ -94,13 +94,7 @@ class ScanProcessor(Node):
         # Cluster points that are not -1.0 and within 0.1m of each other
         clusters = cluster_points(ranges, np.float64(msg.angle_min), np.float64(msg.angle_increment))
 
-        # Log the size of each cluster
-        self.log_clusters(clusters)
         self.publish_clusters(clusters)
-
-    def log_clusters(self, clusters):
-        for i, cluster in enumerate(clusters):
-            self.get_logger().info(f'Cluster {i + 1}: x = {cluster[0]}, y = {cluster[1]}, radius = {cluster[2]}')
 
     def publish_clusters(self, clusters):
         pose_array = PoseArray()
