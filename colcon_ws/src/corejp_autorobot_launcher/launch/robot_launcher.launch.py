@@ -36,6 +36,13 @@ def generate_launch_description():
                 ]),
             )
 
+    urg_object_detector = Node(
+        package="corejp_urg_object_detector",
+        executable="detector",
+        name="detector",
+        output="log",
+    )
+
     #corejp_autorobot_description_path = os.path.join(
     #    get_package_share_directory('corejp_autorobot_description'))
 
@@ -63,6 +70,7 @@ def generate_launch_description():
         rs_launch,
         urg_launch,
         controller_launch,
+        urg_object_detector,
         #rviz,
     ])
 
