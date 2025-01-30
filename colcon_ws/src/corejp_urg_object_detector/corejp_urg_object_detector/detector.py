@@ -43,6 +43,7 @@ def cluster_points(ranges, angle_min, angle_increment):
 
     clusters = []
     current_i = 0
+    is_cluster_detected = False
     for i in range(len(initial_clusters)):
         a_x = initial_clusters[current_i][0]
         a_y = initial_clusters[current_i][1]
@@ -51,12 +52,23 @@ def cluster_points(ranges, angle_min, angle_increment):
         b_y = initial_clusters[i][1]
         b_r = initial_clusters[i][2]
         cluster_size = a_r + b_r + math.sqrt((a_x - b_x) ** 2 + (a_y - b_y) ** 2)
-        if cluster_size >= 1.2 or i == len(initial_clusters)-1:
+        if (cluster_size >= 1.2 and i >= 1):
+            b_x = initial_clusters[i-1][0]
+            b_y = initial_clusters[i-1][1]
+            b_r = initial_clusters[i-1][2]
+            is_cluster_detected = True
+        if i == len(initial_clusters)-1:
+            b_x = initial_clusters[i][0]
+            b_y = initial_clusters[i][1]
+            b_r = initial_clusters[i][2]
+            is_cluster_detected = True
+        if is_cluster_detected:
             cluster_x = (a_x + b_x) / 2.0
             cluster_y = (a_y + b_y) / 2.0
             cluster_radius = (a_r + b_r + math.sqrt((a_x - b_x) ** 2 + (a_y - b_y) ** 2)) / 2.0
             if cluster_radius <= 0.6:
                 clusters.append([cluster_x, cluster_y, cluster_radius])
+            is_cluster_detected = False
             current_i = i
 
     return clusters
