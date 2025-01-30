@@ -4,6 +4,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64, Int64, Bool
 from geometry_msgs.msg import Vector3
+import numpy as np
+import scipy.linalg
 
 class Turret(Node):
 
@@ -28,9 +30,12 @@ class Turret(Node):
         self.control_sub = self.create_subscription(Bool, '/control', self.control_callback, 10)
         
         self.yaw_data = 0.0
+        self.target_yaw = 0.0
         self.ratio_yaw = 2.0
         self.yaw_angle_converter = AngleConverter(self.ratio_yaw, self.offset_yaw)
         self.pid_yaw = PID(10000.0, 0.0, 1000.0)
+        self.lqr_yaw = LQR(0.00578, 1.8, 3.0*(0.05**2.0)/abs(self.ratio_yaw), 0.741, 0.0, 0.86, 0.1)
+        self.get_logger().info(f"{self.lqr_yaw.get_lqr_gain()}")
         self.pid_yaw.target(0)
         self.yaw_pub = self.create_publisher(Int64, '/can_node/gm6020_1/target_volt', 10)
         self.subscription_yaw = self.create_subscription(Float64, '/yaw', self.callback_yaw, 10)
@@ -40,6 +45,7 @@ class Turret(Node):
         self.ratio_pitch = -3.0
         self.pitch_angle_converter = AngleConverter(self.ratio_pitch, self.offset_pitch)
         self.pid_pitch = PID(-20000.0, 0.0, -1000.0)
+        self.lqr_pitch = LQR(0.00578, 1.8, 3.0*(0.05**2.0)/abs(self.ratio_pitch), 0.741, 0.0, 0.86, 0.1)
         self.pid_pitch.target(0)
         self.pitch_pub = self.create_publisher(Int64, '/can_node/gm6020_0/target_volt', 10)
         self.subscription_pitch = self.create_subscription(Float64, '/pitch',self.callback_pitch, 10)
@@ -74,6 +80,7 @@ class Turret(Node):
         
     def callback_yaw(self, msg):
         self.pid_yaw.target(max([math.radians(-80), min([msg.data, math.radians(80)])]))
+        self.target_yaw = msg.data
 
     def callback_pitch(self, msg):
         self.pid_pitch.target(max([math.radians(-8), min([msg.data, math.radians(28)])]))
@@ -94,17 +101,20 @@ class Turret(Node):
         self.yaw_right = msg.data
 
     def timer_callback(self):
+        diff_time_nsec = (self.get_clock().now()-self.stamp).nanoseconds
+        self.stamp = self.get_clock().now()
         yaw_output = self.pid_yaw.update(self.yaw_data)
+        yaw_output = self.lqr_yaw.update(np.array([(self.yaw_data - self.target_yaw)*abs(self.ratio_yaw)]), diff_time_nsec / 1000000000.0) * 1200
         pitch_output = self.pid_pitch.update(self.pitch_data)
-        
-        cycle_check_ok = ((self.get_clock().now()-self.stamp).nanoseconds <= 20000000)
+        self.get_logger().info(f"input: {(self.yaw_data - self.target_yaw)*abs(self.ratio_yaw)}, output:{yaw_output}")
+
+        cycle_check_ok = (diff_time_nsec <= 20000000)
         if not cycle_check_ok:
             print('cyclecheck failed')
-        self.stamp = self.get_clock().now()
 
-        abs_limit = lambda value, limit: math.copysign(min([abs(value), abs(limit)]), value)        
-        yaw_output = abs_limit(yaw_output, self.limit_output) if (self.yaw_left or self.yaw_right) else yaw_output
-        pitch_output = abs_limit(pitch_output, self.limit_output) if (self.pitch_up or self.pitch_down) else pitch_output
+        abs_limit = lambda value, limit: math.copysign(min([abs(value), abs(limit)]), value)
+        yaw_output = abs_limit(yaw_output, self.limit_output) if ((self.yaw_right and yaw_output < 0) or (self.yaw_left and yaw_output > 0)) else yaw_output
+        pitch_output = abs_limit(pitch_output, self.limit_output) if ((self.pitch_up and pitch_output < 0) or (self.pitch_down and pitch_output > 0)) else pitch_output
 
         if not (self.control and cycle_check_ok):
             yaw_output = 0
@@ -158,6 +168,63 @@ class PID:
     def output(self):
         return self._output
 
+class LQR:
+    def __init__(self, motor_inductance, motor_redistance, inertia_moment, torque_constant, viscous_friction_coefficient, static_friction_torque, stribeck_vel):
+        self.motor_inductance = motor_inductance #モータインダクタンス #5.78 mH
+        self.motor_redistance = motor_redistance # モータ抵抗 #1.8 orm
+        self.inertia_moment = inertia_moment # 慣性モーメント
+        self.torque_constant = torque_constant #トルク定数 741.0 mN.m/A
+        self.back_emf_constant = torque_constant #逆起電力係数 741.0 mN.m/A
+        self.viscous_friction_coefficient = viscous_friction_coefficient #粘性抵抗係数 0.0
+
+        # 摩擦パラメータ
+        self.static_friction_torque = static_friction_torque # 静止摩擦トルク 0.8くらい 発振しない程度に上げる
+        self.stribeck_vel = stribeck_vel # Stribeck速度　0.1 rad/s 摩擦の影響を大きく受ける範囲を表す
+
+        # システム行列
+        self.A = np.array([[0, 1, 0],
+                      [0, -self.viscous_friction_coefficient/self.inertia_moment,  self.torque_constant / self.inertia_moment],
+                      [0, -self.back_emf_constant / self.motor_inductance, -self.motor_redistance / self.motor_inductance]])
+        # i = (V - self.back_emf_constant * omega) / self.motor_redistance
+
+        self.B = np.array([[0], 
+                           [0],
+                           [1/self.motor_inductance]])
+
+        self.C = np.array([[1, 0, 0]])  # 観測行列
+
+        # LQR の重み行列
+        Q = np.diag([10, 1, 1])  # 角度の誤差を大きく penalize
+        R = np.array([[1]])  # 入力の重み
+
+        # リカッチ方程式を解いて LQR のゲインを求める
+        P = scipy.linalg.solve_continuous_are(self.A, self.B, Q, R)
+        self.lqr_gain = np.linalg.inv(R) @ self.B.T @ P
+
+        self.input = np.array([[0]])
+        self.x = np.array([[0.0], 
+                           [0.0],
+                           [0.0]])
+        self.old_x = 0.0
+
+    def state_update(self, x, dt):
+        self.x[0][0] = x
+        self.x[1][0] = (x - self.old_x) / dt
+        self.x[2][0] = (self.input[0][0] - self.back_emf_constant * self.x[1][0]) / self.motor_redistance
+        self.old_x = x
+
+    def update(self, x, dt):
+        self.state_update(x, dt)
+        self.input = -self.lqr_gain @ self.x
+        friction_torque =  (self.static_friction_torque * np.exp(- (self.x[1][0] / self.stribeck_vel) ** 2)) * math.tanh(self.x[0][0] / 0.000001)
+        self.input[0][0] += (-friction_torque +  self.torque_constant * self.back_emf_constant * self.x[1][0] / self.motor_redistance) / (self.torque_constant / self.motor_redistance)
+        # 念の為12Vでリミット
+        if abs(self.input[0][0]) > 12.0:
+            self.input[0][0] = 12.0 * self.input[0][0] / abs(self.input[0][0]) 
+        return self.input[0][0]
+
+    def get_lqr_gain(self):
+        return self.lqr_gain
 
 def main():
     rclpy.init()
