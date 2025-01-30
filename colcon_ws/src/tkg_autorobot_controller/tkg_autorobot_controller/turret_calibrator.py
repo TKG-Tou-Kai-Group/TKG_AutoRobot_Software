@@ -39,6 +39,7 @@ class Turret(Node):
         self.subscription_yaw_right = self.create_subscription(Bool, '/gpio_node/in0', self.yaw_right_callback, 10)
         self.subscription_yaw_left = self.create_subscription(Bool, '/gpio_node/in1', self.yaw_left_callback, 10)
 
+        self.reach_counter = 0
         self.timer = self.create_timer(0.01, self.timer_callback)
 
         self.limit_output = 0.1
@@ -81,12 +82,20 @@ class Turret(Node):
                 self.yaw_right_reached = True
             return
         elif not self.yaw_left_reached:
+            if self.reach_counter < 100:
+                self.reach_counter += 1
+                return
+            self.reach_counter = 0
             self.get_logger().info("moving left...")
             self.output_yaw(4000)
             if self.yaw_left:
                 self.yaw_left_reached = True
             return
         elif not self.calibrated_data_written:
+            if self.reach_counter < 100:
+                self.reach_counter += 1
+                return
+            self.reach_counter = 0
             self.get_logger().info("data writing")
             self.output_yaw(0)
             calibrated_yaw_data = (self.max_yaw + self.min_yaw)/2.0
