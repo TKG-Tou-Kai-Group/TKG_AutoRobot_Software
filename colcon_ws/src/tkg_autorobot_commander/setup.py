@@ -22,7 +22,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "commander = corejp_urg_object_detector.commander:main",
+            "commander = tkg_autorobot_commander.commander:main",
         ],
     },
 )
