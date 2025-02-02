@@ -18,6 +18,7 @@ class Auto(Node):
 
     def __init__(self):
         super().__init__('auto')
+
         # 砲塔の旋回中心からLidarまでの位置
         self.POSE_OFFSET_X = 0.3
         self.POSE_OFFSET_Y = 0.0
@@ -45,11 +46,15 @@ class Auto(Node):
         self.camera_mat = None
         self.dist_coeffs = None
         self.extractor = None
-        #TODO: チームによる設定をパラメータで設定できるようにする
-        # 敵がRED
-        #self.detector = DamagePanelDetection(15, 6, 255, 20, 8, 10)
-        #敵がBLUE
-        self.detector = DamagePanelDetection(90, 6, 255, 20, 8, 10)
+        self.declare_parameter("enemy", "")
+        enemy = self.get_parameter("enemy").value
+        if enemy == "RED":
+            self.detector = DamagePanelDetection(15, 6, 255, 20, 8, 10)
+        elif enemy == "BLUE":
+            self.detector = DamagePanelDetection(90, 6, 255, 20, 8, 10)
+        else:
+            self.get_logger().error(f"敵パラメータの指定が不正です。{enemy}")
+            raise KeyboardInterrupt
         self.image = None
         self.bridge = CvBridge()
         self.camera_image_sub = self.create_subscription(Image,'/camera/camera/color/image_raw',self.image_callback,10)
@@ -70,8 +75,6 @@ class Auto(Node):
 
         self.turret_data = Vector3()
         self.turret_sub = self.create_subscription(Vector3,'/current_turret_pose',self.turret_callback,10)
-
-        #self.task_timer =  self.create_timer(0.1, self.timer_callback)
 
     def turret_callback(self, msg):
         self.turret_data = msg
@@ -216,17 +219,21 @@ class Auto(Node):
                 (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
                 if detect_point_x >= 0 and detect_point_y >= 0: # 敵のダメージパネルを検出できた
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
-                    damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2))
+                    target_distance =  math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
+                    damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, target_distance)
                     self.get_logger().info(f"{damage_panel_position}")
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
 
                     self.target_list[self.selected_target_index].state = Target.ENEMY
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
+                    damage_panel_distance =  math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2)
                     target_pitch = calc_best_launch_angle(current_rpm, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
                     if target_pitch > math.radians(-8):
                         self.pitch_pub.publish(Float64(data=float(target_pitch)))
-                    if abs(target_yaw - current_yaw) <= math.radians(5.0) and abs(target_pitch - current_pitch) <= math.radians(5.0) and abs(current_rpm - self.TARGET_RPM) <= 100:
+                    #if abs(target_yaw - current_yaw) <= math.radians(5.0) and abs(target_pitch - current_pitch) <= math.radians(5.0) and abs(current_rpm - self.TARGET_RPM) <= 100:
+                    angle_tolerance = math.atan2(0.05, damage_panel_distance)
+                    if abs(target_yaw - current_yaw) <= angle_tolerance and abs(target_pitch - current_pitch) <= angle_tolerance and abs(current_rpm - self.TARGET_RPM) <= 100:
                         self.hammer_pub.publish(Empty())
                         self.mazemaze_pub.publish(Empty())
                         self.attack_counter += 1
