@@ -12,6 +12,7 @@ from cv_bridge import CvBridge
 from tkg_autorobot_commander.target_class import Target
 from tkg_autorobot_commander.extract_object_region import ExtractObject
 from tkg_autorobot_commander.damage_panel_detection import DamagePanelDetection
+from tkg_autorobot_commander.calc_launch_angle import calc_best_launch_angle
 
 class Auto(Node):
 
@@ -20,6 +21,7 @@ class Auto(Node):
         # 砲塔の旋回中心からLidarまでの位置
         self.POSE_OFFSET_X = 0.3
         self.POSE_OFFSET_Y = 0.0
+        self.TARGET_RPM = 6000
 
         self.AUTO_MODE_INIT = 0
         self.AUTO_MODE_TRACKING = 1
@@ -53,6 +55,11 @@ class Auto(Node):
         self.camera_image_sub = self.create_subscription(Image,'/camera/camera/color/image_raw',self.image_callback,10)
         self.camera_info_sub = self.create_subscription(CameraInfo,'/camera/camera/color/camera_info',self.camera_info_callback,10)
 
+        self.motor0_rpm = 0
+        self.motor1_rpm = 0
+        self.subscription0 = self.create_subscription(Float64, '/can_node/c620_0/rpm', self.motor0_callback, 10)
+        self.subscription1 = self.create_subscription(Float64, '/can_node/c620_1/rpm', self.motor1_callback, 10)
+
         self.poses = []
         self.target_list = []
         self.selected_target_id = -1
@@ -79,6 +86,12 @@ class Auto(Node):
     def camera_info_callback(self, msg):
         self.camera_mat = np.array(msg.k).reshape(3, 3)
         self.dist_coeffs = np.array(msg.d)
+
+    def motor0_callback(self, msg):
+        self.motor0_rpm = msg.data
+
+    def motor1_callback(self, msg):
+        self.motor1_rpm = msg.data
 
     def clusters_callback(self, msg):
         if self.timer_processing == True:
@@ -155,11 +168,15 @@ class Auto(Node):
                 if detect_point_x >= 0 and detect_point_y >= 0:
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
                     damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2))
-                    self.get_logger().info(f"{damage_panel_position}")
+                    target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
+                    target_pitch = calc_best_launch_angle(4000, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
+                    self.get_logger().info(f"damage_panel_position: {damage_panel_position}")
+                    self.get_logger().info(f"target_yaw: {target_yaw}, target_pitch: {target_pitch}")
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
                 ros_image = self.bridge.cv2_to_imgmsg(result_image, encoding='bgr8')
                 self.object_image_pub.publish(ros_image)
             self.get_logger().info(f"TRACKING_MODE:")
+            self.roller_pub.publish(Float64(data=float(0.0)))
             if not self.selected_target_id == -1:
                 target_yaw = math.atan2(self.target_list[self.selected_target_index].y, self.target_list[self.selected_target_index].x)
                 target_pitch = 0.0
@@ -191,6 +208,9 @@ class Auto(Node):
 
         if self.auto_mode == self.AUTO_MODE_ATTACK:
             self.get_logger().info(f"ATTACK_MODE:")
+            # TODO: デバッグが済んだら、ローラを回転させる
+            #self.roller_pub.publish(Float64(data=float(self.TARGET_RPM)))
+            current_rpm = (abs(self.motor0_rpm) + abs(self.motor1_rpm)) / 2.0
             if not self.selected_target_id == -1:
                 extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
                 (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
@@ -201,14 +221,12 @@ class Auto(Node):
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
 
                     self.target_list[self.selected_target_index].state = Target.ENEMY
-                    # TODO: target_yawとtarget_pitchの設定方法を検討
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
-                    target_pitch = math.atan2(damage_panel_position[2], math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2))
+                    target_pitch = calc_best_launch_angle(current_rpm, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
-                    self.pitch_pub.publish(Float64(data=float(target_pitch)))
-                    if abs(target_yaw - current_yaw) <= math.radians(5.0) and abs(target_pitch - current_pitch) <= math.radians(5.0):
-                        # TODO: デバッグが済んだら、ローラを回転させる（常時回転のほうが良い？）
-                        #self.roller_pub.publish(Float64(data=float(4000)))
+                    if target_pitch > math.radians(-8):
+                        self.pitch_pub.publish(Float64(data=float(target_pitch)))
+                    if abs(target_yaw - current_yaw) <= math.radians(5.0) and abs(target_pitch - current_pitch) <= math.radians(5.0) and abs(current_rpm - self.TARGET_RPM) <= 100:
                         self.hammer_pub.publish(Empty())
                         self.mazemaze_pub.publish(Empty())
                         self.attack_counter += 1
