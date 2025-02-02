@@ -27,6 +27,7 @@ class ExtractObject:
         self.target_z = target_z
         self.target_width = target_width
         self.target_height = target_height
+        self.M = None
 
     def crop_3d_quad(self, image, points_3d, camera_matrix, dist_coeffs, output_size=(200, 200)):
         """
@@ -47,10 +48,10 @@ class ExtractObject:
         dst_points = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]], dtype=np.float32)
     
         # 射影変換行列を求める
-        M = cv2.getPerspectiveTransform(points_2d.astype(np.float32), dst_points)
+        self.M = cv2.getPerspectiveTransform(points_2d.astype(np.float32), dst_points)
     
         # 透視変換を適用
-        cropped = cv2.warpPerspective(image, M, (width, height))
+        cropped = cv2.warpPerspective(image, self.M, (width, height))
 
         # 画像に四角形を描画
         image_with_quad = image.copy()
@@ -90,6 +91,41 @@ class ExtractObject:
         print(points_3d)
             
         return self.crop_3d_quad(image, points_3d, self.camera_matrix, self.dist_coeffs, output_size)
+
+    def convert_croped_point_to_image_point(self, x, y):
+        if self.M is None:
+            return (-1, -1)
+        cropped_pt = np.array([[[x, y]]], dtype=np.float32)
+        original_pt = cv2.perspectiveTransform(cropped_pt, np.linalg.inv(self.M))
+        u, v = original_pt[0,0]
+
+        return (u, v)
+
+    def convert_image_point_to_target_point(self, x, y, known_depth):
+        x_norm = (x - self.camera_matrix[0,2]) / self.camera_matrix[0,0]
+        y_norm = (y - self.camera_matrix[1,2]) / self.camera_matrix[1,1]
+
+        Z0 = known_depth
+        X_cam = x_norm * Z0
+        Y_cam = y_norm * Z0
+        Z_cam = Z0
+        point_3d = np.array([X_cam, Y_cam, Z_cam])
+
+        point_3d[0] += -self.camera_y
+        point_3d[1] += -self.camera_z
+        point_3d[2] -= -self.camera_x
+
+        point_y = point_3d[1]
+        point_z = point_3d[2]
+        point_3d[2] = point_z * math.cos(self.camera_pitch) - (-point_y) * math.sin(self.camera_pitch)
+        point_3d[1] = -(point_z * math.sin(self.camera_pitch) + (-point_y) * math.cos(self.camera_pitch))
+    
+        point_x = point_3d[0]
+        point_z = point_3d[2]
+        point_3d[2] = point_z * math.cos(self.camera_yaw) - (-point_x) * math.sin(self.camera_yaw)
+        point_3d[0] = -(point_z * math.sin(self.camera_yaw) + (-point_x) * math.cos(self.camera_yaw))
+
+        return np.array([point_3d[2], -point_3d[0], -point_3d[1]])
 
 '''
 # 入力画像を読み込む（適当なカメラ画像を使用）
