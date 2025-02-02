@@ -18,7 +18,7 @@ def cluster_points(ranges, angle_min, angle_increment):
     current_y = -1.0
 
     for i in range(len(ranges)):
-        if ranges[i] == np.inf or ranges[i] <= 0.1 or ranges[i] >= 30.0:
+        if ranges[i] == np.inf or ranges[i] <= 0.1 or ranges[i] >= 15.0:
             continue
         angle = angle_min + i * angle_increment
         x = ranges[i] * math.cos(angle)
