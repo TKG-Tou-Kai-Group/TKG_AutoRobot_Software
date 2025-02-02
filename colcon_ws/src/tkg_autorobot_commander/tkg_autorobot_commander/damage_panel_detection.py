@@ -24,6 +24,8 @@ def matching_template(img, positive_template, negative_template):
     return result
 
 class DamagePanelDetection:
+    DEBUG = False
+
     def __init__(self, target_h, target_s, target_v, sigma_h, sigma_s, sigma_v):
         self.target_h = target_h
         self.target_s = target_s
@@ -70,7 +72,8 @@ class DamagePanelDetection:
         _, max_val, _, max_loc = cv2.minMaxLoc(matching_result)
         # TODO: しきい値の調整は必須
         threashold = 1500000000000.0
-        print(f"最大値: {max_val}, しきい値：{threashold}, 位置: {max_loc}")
+        if self.DEBUG:
+            print(f"最大値: {max_val}, しきい値：{threashold}, 位置: {max_loc}")
         if max_val < threashold:
             return (-1, -1), extract_result
         else:

@@ -64,7 +64,6 @@ class ExtractObject:
         self.target_y = target_y
         self.camera_pitch = camera_pitch
         self.camera_yaw = camera_yaw
-        print(self.target_x, self.target_y, self.target_z)
 
         points_3d = np.array([
             [-self.target_y-self.target_width/2.0*math.cos(math.atan2(self.target_y,self.target_x)), -self.target_z-self.target_height/2.0, self.target_x-self.target_width/2.0*math.sin(math.atan2(self.target_y,self.target_x))],
@@ -72,7 +71,6 @@ class ExtractObject:
             [-self.target_y+self.target_width/2.0*math.cos(math.atan2(self.target_y,self.target_x)), -self.target_z+self.target_height/2.0, self.target_x+self.target_width/2.0*math.sin(math.atan2(self.target_y,self.target_x))],
             [-self.target_y-self.target_width/2.0*math.cos(math.atan2(self.target_y,self.target_x)), -self.target_z+self.target_height/2.0, self.target_x-self.target_width/2.0*math.sin(math.atan2(self.target_y,self.target_x))]
         ], dtype=np.float32)
-        print(points_3d)
 
         for point_3d in points_3d:
             point_x = point_3d[0]
@@ -88,7 +86,6 @@ class ExtractObject:
             point_3d[0] -= -self.camera_y
             point_3d[1] -= -self.camera_z
             point_3d[2] += -self.camera_x
-        print(points_3d)
             
         return self.crop_3d_quad(image, points_3d, self.camera_matrix, self.dist_coeffs, output_size)
 
