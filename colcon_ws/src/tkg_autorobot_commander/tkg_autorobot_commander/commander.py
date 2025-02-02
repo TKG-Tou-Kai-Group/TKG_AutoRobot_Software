@@ -56,8 +56,10 @@ class Auto(Node):
             self.get_logger().error(f"敵パラメータの指定が不正です。{enemy}")
             raise KeyboardInterrupt
         self.image = None
+        self.depth_image = None
         self.bridge = CvBridge()
         self.camera_image_sub = self.create_subscription(Image,'/camera/camera/color/image_raw',self.image_callback,10)
+        self.depth_image_sub = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.depth_image_callback, 10)
         self.camera_info_sub = self.create_subscription(CameraInfo,'/camera/camera/color/camera_info',self.camera_info_callback,10)
 
         self.motor0_rpm = 0
@@ -83,6 +85,12 @@ class Auto(Node):
         try:
             # ROS2のImageメッセージをOpenCVの画像に変換
             self.image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert image: {e}")
+
+    def depth_image_callback(self, msg):
+        try:
+            self.depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
         except Exception as e:
             self.get_logger().error(f"Failed to convert image: {e}")
 
@@ -170,7 +178,17 @@ class Auto(Node):
                 (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
                 if detect_point_x >= 0 and detect_point_y >= 0:
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
-                    damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2))
+                    if self.depth_image is not None:
+                        image_height, image_width, _ = self.image.shape
+                        depth_image_height, depth_image_width, _ = self.image.shape
+                        depth_x = int(result_x * depth_image_width / image_width)
+                        depth_y = int(result_y * depth_image_height / image_height)
+                        target_distance = self.depth_image[depth_y, depth_x] / 1000.0
+                        if target_distance <= 0.1:
+                            target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
+                    else:
+                        target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
+                    damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, target_distance)
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
                     target_pitch = calc_best_launch_angle(4000, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
                     self.get_logger().info(f"damage_panel_position: {damage_panel_position}")
@@ -220,6 +238,17 @@ class Auto(Node):
                 if detect_point_x >= 0 and detect_point_y >= 0: # 敵のダメージパネルを検出できた
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
                     target_distance =  math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
+                    if self.depth_image is not None:
+                        image_height, image_width, _ = self.image.shape
+                        depth_image_height, depth_image_width, _ = self.image.shape
+                        depth_x = int(result_x * depth_image_width / image_width)
+                        depth_y = int(result_y * depth_image_height / image_height)
+                        target_distance = self.depth_image[depth_y, depth_x] / 1000.0
+                        if target_distance <= 0.1:
+                            target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
+                    else:
+                        target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
+
                     damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, target_distance)
                     self.get_logger().info(f"{damage_panel_position}")
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
