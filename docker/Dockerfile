@@ -108,7 +108,7 @@ RUN cd /opt && \
   make -j8 && \
   make install
 
-RUN apt update && apt install -qq -y ros-humble-realsense2-* ros-humble-laser-proc ros-humble-joy-linux
+RUN apt update && apt install -qq -y ros-humble-realsense2-* ros-humble-laser-proc ros-humble-joy-linux ros-humble-foxglove-bridge
 RUN pip3 install sympy --ignore-installed
 RUN pip3 install pyusb ultralytics numba
 RUN echo 'source /root/colcon_ws/install/setup.sh' >> ~/.bashrc
