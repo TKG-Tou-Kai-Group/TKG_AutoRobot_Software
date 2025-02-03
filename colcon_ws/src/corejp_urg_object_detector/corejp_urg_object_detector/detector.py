@@ -18,11 +18,15 @@ def cluster_points(ranges, angle_min, angle_increment):
     current_y = -1.0
 
     for i in range(len(ranges)):
-        if ranges[i] == np.inf or ranges[i] <= 0.1 or ranges[i] >= 15.0:
+        # 最大距離は射程範囲に合わせて調整
+        if ranges[i] == np.inf or ranges[i] <= 0.1 or ranges[i] >= 10.0:
             continue
         angle = angle_min + i * angle_increment
         x = ranges[i] * math.cos(angle)
         y = ranges[i] * math.sin(angle)
+        # CoREjp 2025 フィールド外に発射しないための特殊条件
+        if y > 0 and ranges[i] >= 7.5:
+            continue
         if math.sqrt((x - current_x) ** 2 + (y - current_y) ** 2) > 0.05:
             if current_cluster_size >= 3:
                 current_cluster_x = x_sum / current_cluster_size
