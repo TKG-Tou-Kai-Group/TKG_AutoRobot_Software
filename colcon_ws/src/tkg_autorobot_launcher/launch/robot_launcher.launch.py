@@ -18,12 +18,12 @@ import xacro
 def generate_launch_description():
     rs_launch = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([os.path.join(
-                    get_package_share_directory('corejp_autorobot_launcher'), 'launch'), '/rs_launch.py']),
+                    get_package_share_directory('tkg_autorobot_launcher'), 'launch'), '/rs_launch.py']),
             )
 
     urg_launch = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource([os.path.join(
-                    get_package_share_directory('corejp_autorobot_launcher'), 'launch'), '/urg_node2.launch.py']),
+                    get_package_share_directory('tkg_autorobot_launcher'), 'launch'), '/urg_node2.launch.py']),
             )
 
     controller_launch = IncludeLaunchDescription(
@@ -37,14 +37,14 @@ def generate_launch_description():
             )
 
     urg_object_detector = Node(
-        package="corejp_urg_object_detector",
+        package="tkg_urg_object_detector",
         executable="detector",
         name="detector",
         output="log",
     )
 
-    #corejp_autorobot_description_path = os.path.join(
-    #    get_package_share_directory('corejp_autorobot_description'))
+    #tkg_autorobot_description_path = os.path.join(
+    #    get_package_share_directory('tkg_autorobot_description'))
 
     #xacro_file = os.path.join(nakanoshima_autorobot_description_path,
     #                          'robots',

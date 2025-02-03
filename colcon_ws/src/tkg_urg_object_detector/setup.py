@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'corejp_urg_object_detector'
+package_name = 'tkg_urg_object_detector'
 
 setup(
     name=package_name,
@@ -22,7 +22,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "detector = corejp_urg_object_detector.detector:main",
+            "detector = tkg_urg_object_detector.detector:main",
         ],
     },
 )
