@@ -11,7 +11,9 @@
   - ROS2 Humble
 
 PC <---Ethernet---> RaspberryPi <--CAN/GPIO--> 自動ロボット
+
    <---USB---> [RealSense D455](https://www.intelrealsense.com/depth-camera-d455/)
+
    <---Ethernet---> [UST-30LX](https://www.hokuyo-aut.co.jp/search/single.php?serial=195)
 
 ## 環境構築
@@ -65,19 +67,30 @@ PC <---Ethernet---> RaspberryPi <--CAN/GPIO--> 自動ロボット
 ワークスペースに格納されているパッケージの概要を以下に示す。詳細は各パッケージのREADME.mdに記載している。
 
 - [CoRE_AutoRobot_2024_sample](https://github.com/scramble-robot/CoRE_AutoRobot_2024_sample)
+
   実行委員会が使用したプログラム、動作確認および一部コントローラを流用
 
+
 - [tkg_autorobot_controller](https://github.com/TKG-Tou-Kai-Group/tkg_autorobot_controller)
+
   チームTKGで開発した自動ロボット砲塔姿勢制御プログラム、静止摩擦を考慮したLQR制御が特徴
 
+
 - tkg_autorobot_urg_object_detector
+
   測域センサを用いて周囲の物体の位置を取得するプログラム
 
+
 - tkg_autorobot_commander
+
   各センサや上記パッケージからの情報を元に自動ロボットの行動を決定するプログラム、動作を速くするために画像処理なども含む
 
+
 - tkg_autorobot_launcher
+
   自動ロボットを動作させるために必要なlaunchファイルを格納したパッケージ
 
+
 - [urg_node2](https://github.com/Hokuyo-aut/urg_node2)
+
   測域センサ用ROS 2パッケージ、aptでインストールできないのでサブモジュールとして導入
