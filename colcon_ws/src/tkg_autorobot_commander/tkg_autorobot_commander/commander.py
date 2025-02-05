@@ -15,6 +15,7 @@ from tkg_autorobot_commander.damage_panel_detection import DamagePanelDetection
 from tkg_autorobot_commander.calc_launch_angle import calc_best_launch_angle
 
 class Auto(Node):
+    DEBUG = True
 
     def __init__(self):
         super().__init__('auto')
@@ -27,6 +28,7 @@ class Auto(Node):
         self.AUTO_MODE_INIT = 0
         self.AUTO_MODE_TRACKING = 1
         self.AUTO_MODE_ATTACK = 2
+        self.AUTO_MODE_TEST = -1
         self.auto_mode = self.AUTO_MODE_INIT
 
         self.recog_fail_counter = 0
@@ -170,10 +172,13 @@ class Auto(Node):
 
             if self.extractor is not None and self.image is not None:
                 self.auto_mode = self.AUTO_MODE_TRACKING
-    
-        if self.auto_mode == self.AUTO_MODE_TRACKING:
+                if self.DEBUG:
+                    self.auto_mode = self.AUTO_MODE_TEST
+
+        elif self.auto_mode == self.AUTO_MODE_TEST:
+            self.get_logger().info(f"TRACKING_MODE:")
             # テストコード
-            if False: #not self.selected_target_id == -1:
+            if not self.selected_target_id == -1:
                 extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
                 (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
                 if detect_point_x >= 0 and detect_point_y >= 0:
@@ -196,6 +201,8 @@ class Auto(Node):
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
                 ros_image = self.bridge.cv2_to_imgmsg(result_image, encoding='bgr8')
                 self.object_image_pub.publish(ros_image)
+
+        elif self.auto_mode == self.AUTO_MODE_TRACKING:
             self.get_logger().info(f"TRACKING_MODE:")
             self.roller_pub.publish(Float64(data=float(0.0)))
             if not self.selected_target_id == -1:
@@ -216,6 +223,7 @@ class Auto(Node):
                     else:
                         self.recog_fail_counter += 1
                         if self.recog_fail_counter > 10:
+                            self.recog_fail_counter = 0
                             # TODO: デバッグが済んだら、状態をOTHERに設定するようにする
                             self.target_list[self.selected_target_index].state = Target.UNKNOWN #Target.OTHER
                             self.selected_target_id = -1
@@ -227,7 +235,7 @@ class Auto(Node):
             else:
                 self.recog_fail_counter = 0
 
-        if self.auto_mode == self.AUTO_MODE_ATTACK:
+        elif self.auto_mode == self.AUTO_MODE_ATTACK:
             self.get_logger().info(f"ATTACK_MODE:")
             # TODO: デバッグが済んだら、ローラを回転させる
             #self.roller_pub.publish(Float64(data=float(self.TARGET_RPM)))
@@ -260,7 +268,6 @@ class Auto(Node):
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
                     if target_pitch > math.radians(-8):
                         self.pitch_pub.publish(Float64(data=float(target_pitch)))
-                    #if abs(target_yaw - current_yaw) <= math.radians(5.0) and abs(target_pitch - current_pitch) <= math.radians(5.0) and abs(current_rpm - self.TARGET_RPM) <= 100:
                     angle_tolerance = math.atan2(0.05, damage_panel_distance)
                     if abs(target_yaw - current_yaw) <= angle_tolerance and abs(target_pitch - current_pitch) <= angle_tolerance and abs(current_rpm - self.TARGET_RPM) <= 100:
                         self.hammer_pub.publish(Empty())
@@ -271,15 +278,26 @@ class Auto(Node):
                             self.attack_counter = 0
                             self.auto_mode = self.AUTO_MODE_TRACKING
                 else:
-                    self.target_list[self.selected_target_index].state = Target.UNKNOWN
-                    self.selected_target_id = -1
-                    self.attack_counter = 0
-                    self.auto_mode = self.AUTO_MODE_TRACKING
+                    # 目標の追跡を続ける
+                    target_yaw = math.atan2(self.target_list[self.selected_target_index].y, self.target_list[self.selected_target_index].x)
+                    target_pitch = 0.0
+                    self.yaw_pub.publish(Float64(data=float(target_yaw)))
+                    self.pitch_pub.publish(Float64(data=float(target_pitch)))
+
+                    self.recog_fail_counter += 1
+                    if self.recog_fail_counter > 10:
+                        self.target_list[self.selected_target_index].state = Target.UNKNOWN
+                        self.selected_target_id = -1
+                        self.attack_counter = 0
+                        self.recog_fail_counter = 0
+                        self.auto_mode = self.AUTO_MODE_TRACKING
+
                 ros_image = self.bridge.cv2_to_imgmsg(result_image, encoding='bgr8')
                 self.object_image_pub.publish(ros_image)
 
                 self.target_list[self.selected_target_index].state_checked_time = current_time
             else:
+                self.recog_fail_counter = 0
                 self.selected_target_id = -1
                 self.attack_counter = 0
                 self.auto_mode = self.AUTO_MODE_TRACKING
