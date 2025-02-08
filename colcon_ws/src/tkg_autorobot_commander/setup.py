@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             "commander = tkg_autorobot_commander.commander:main",
+            "shoot_test = tkg_autorobot_commander.shoot_test:main",
         ],
     },
 )
