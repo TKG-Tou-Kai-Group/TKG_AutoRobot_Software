@@ -12,7 +12,7 @@ from cv_bridge import CvBridge
 from tkg_autorobot_commander.target_class import Target
 from tkg_autorobot_commander.extract_object_region import ExtractObject
 from tkg_autorobot_commander.damage_panel_detection import DamagePanelDetection
-from tkg_autorobot_commander.calc_launch_angle import calc_best_launch_angle
+import tkg_autorobot_commander.calc_launch_angle as calcurator
 
 class Auto(Node):
     DEBUG = True
@@ -179,8 +179,9 @@ class Auto(Node):
             self.get_logger().info(f"TRACKING_MODE:")
             # テストコード
             if not self.selected_target_id == -1:
+                self.roller_pub.publish(Float64(data=float(0.0)))
                 extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
-                (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
+                (detect_point_x, detect_point_y) = self.detector.detect(extract_image)
                 if detect_point_x >= 0 and detect_point_y >= 0:
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
                     if self.depth_image is not None:
@@ -195,9 +196,9 @@ class Auto(Node):
                         target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
                     damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, target_distance)
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
-                    target_pitch = calc_best_launch_angle(4000, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
-                    self.get_logger().info(f"damage_panel_position: {damage_panel_position}")
-                    self.get_logger().info(f"target_yaw: {target_yaw}, target_pitch: {target_pitch}")
+                    target_pitch = calcurator.calc_best_launch_angle(self.TARGET_RPM, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
+                    #self.get_logger().info(f"damage_panel_position: {damage_panel_position}")
+                    #self.get_logger().info(f"target_yaw: {target_yaw}, target_pitch: {target_pitch}")
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
                 ros_image = self.bridge.cv2_to_imgmsg(result_image, encoding='bgr8')
                 self.object_image_pub.publish(ros_image)
@@ -264,7 +265,7 @@ class Auto(Node):
                     self.target_list[self.selected_target_index].state = Target.ENEMY
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
                     damage_panel_distance =  math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2)
-                    target_pitch = calc_best_launch_angle(current_rpm, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
+                    target_pitch = calcurator.calc_best_launch_angle(current_rpm, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
                     if target_pitch > math.radians(-8):
                         self.pitch_pub.publish(Float64(data=float(target_pitch)))
