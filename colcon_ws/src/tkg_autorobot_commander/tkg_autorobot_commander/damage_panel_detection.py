@@ -34,6 +34,8 @@ class DamagePanelDetection:
         self.sigma_s = sigma_s
         self.sigma_v = sigma_v
 
+        self.detect_result = None
+
         self.make_template()
 
     def detect(self, img):
@@ -66,7 +68,8 @@ class DamagePanelDetection:
         mask = (weight * 255).astype(np.uint8)
 
         # 7. マスクを元画像に適用して抽出結果を作成
-        extract_result = cv2.bitwise_and(img, img, mask=mask)
+        if self.DEBUG:
+            self.detect_result = cv2.bitwise_and(img, img, mask=mask)
 
         matching_result = matching_template(mask, self.positive_template, self.negative_template)
         _, max_val, _, max_loc = cv2.minMaxLoc(matching_result)
@@ -75,9 +78,9 @@ class DamagePanelDetection:
         if self.DEBUG:
             print(f"最大値: {max_val}, しきい値：{threashold}, 位置: {max_loc}")
         if max_val < threashold:
-            return (-1, -1), extract_result
+            return (-1, -1)
         else:
-            return (int(max_loc[0] + self.SIZE_X//2), int(max_loc[1] + self.SIZE_Y//2)), extract_result
+            return (int(max_loc[0] + self.SIZE_X//2), int(max_loc[1] + self.SIZE_Y//2))
 
     def make_template(self):
 
@@ -116,3 +119,6 @@ class DamagePanelDetection:
 
         # 横方向に繰り返して (SIZE_Y, SIZE_X) の画像を生成
         self.negative_template = np.tile(negative_y, (1, self.SIZE_X))
+
+    def get_detect_result(self):
+        return self.detect_result
