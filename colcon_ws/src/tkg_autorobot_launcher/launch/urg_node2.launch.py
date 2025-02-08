@@ -31,7 +31,7 @@ def generate_launch_description():
 
     # パラメータファイルのパス設定
     config_file_path = os.path.join(
-        get_package_share_directory('corejp_autorobot_launcher'),
+        get_package_share_directory('tkg_autorobot_launcher'),
         'config',
         'params_ether.yaml'
     )
