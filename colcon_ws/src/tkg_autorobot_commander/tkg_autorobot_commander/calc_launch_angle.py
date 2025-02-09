@@ -6,73 +6,27 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
 
+# ===== グローバル変数 =====
+# ローラーの半径 [m]
 ROLLER_RADIUS = 0.02
 
-# ===== グローバル変数 =====
-# 初速 (v) の最小値、最大値、刻み幅
+# 初速 (v) の最小値、最大値、刻み幅 [m/s]
 V_MIN = 3.0
 V_MAX = 12.6
 V_STEP = 0.2
 
-# 目標距離 (l) の最小値、最大値、刻み幅
+# 目標距離 (l) の最小値、最大値、刻み幅 [m]
 L_MIN = 0.1
 L_MAX = 15.0
 L_STEP = 0.1
 
-# 目標高さ (h) の最小値、最大値、刻み幅
+# 目標高さ (h) の最小値、最大値、刻み幅 [m]
 H_MIN = -0.1
 H_MAX = 0.5
 H_STEP = 0.05
 
 # ルックアップテーブルのファイル名
 LOOKUP_FILENAME = "lookup_table.pkl"
-
-def calc_launch_angles(v, l, h, g=9.8):
-    """
-    初速 v [m/s] で斜方投射したとき、水平距離 l [m]、高さ h [m] の位置に到達するための
-    射出角 θ（ラジアン）と到達時刻 t を計算する関数です。
-    
-    パラメータ:
-      v: 初速 [m/s]
-      l: 目標までの水平距離 [m]
-      h: 目標の高さ [m]
-      g: 重力加速度 [m/s^2]（デフォルトは 9.8）
-      
-    戻り値:
-      解のリスト。各解は辞書 { 'launch_angle': θ, 'flight_time': t } を含みます。
-    """
-    # 斜方投射の運動方程式から、目標 (l, h) に到達する条件は
-    # h = l tanθ - (g l^2)/(2 v^2 cos²θ)
-    # となります。ここで u = tanθ とおくと、以下の2次方程式が得られます：
-    # (g l^2) u² - (2 v² l) u + (g l² + 2 v² h) = 0
-    a = g * l**2
-    b = -2 * v**2 * l
-    c = g * l**2 + 2 * v**2 * h
-
-    discriminant = b**2 - 4 * a * c
-    if discriminant < 0:
-        raise ValueError("与えられた条件では解が存在しません（目標に届かないか、初速不足です）。")
-    
-    solutions = []
-    # 2 つの解（場合によっては重解となる）を求めます
-    for sign in [+1, -1]:
-        u = (-b + sign * np.sqrt(discriminant)) / (2 * a)  # u = tanθ
-        theta = np.arctan(u)  # 射出角 [rad]
-        cos_theta = np.cos(theta)
-        if np.abs(cos_theta) < 1e-8:
-            continue  # 実用的でない解は除外
-        # x方向は等速運動なので、到達時刻は t = l / (v cosθ)
-        t = l / (v * cos_theta)
-        solutions.append({
-            'launch_angle': theta,
-            'flight_time': t,
-        })
-
-    # 得られた解の中から、到達時刻が最も早い（tが最小の）解を選択
-    best_solution = min(solutions, key=lambda sol: sol['flight_time'])
-
-    return best_solution['launch_angle']
-
 
 # 定数・パラメータの設定
 g = 9.8             # 重力加速度 [m/s²]
@@ -133,7 +87,68 @@ def f(theta, v0, target_x, target_y):
         return -1e3
     return y_at_target - target_y
 
+def calc_launch_angles(v, l, h, g=9.8):
+    """
+    初速 v [m/s] で斜方投射したとき、水平距離 l [m]、高さ h [m] の位置に到達するための
+    射出角 θ（ラジアン）と到達時刻 t を計算する。
+    空気抵抗は考慮しない。
+    
+    パラメータ:
+      v: 初速 [m/s]
+      l: 目標までの水平距離 [m]
+      h: 目標の高さ [m]
+      g: 重力加速度 [m/s^2]（デフォルトは 9.8）
+      
+    戻り値:
+      射出角θ [rad]
+    """
+    # 斜方投射の運動方程式から、目標 (l, h) に到達する条件は
+    # h = l tanθ - (g l^2)/(2 v^2 cos²θ)
+    # となります。ここで u = tanθ とおくと、以下の2次方程式が得られます：
+    # (g l^2) u² - (2 v² l) u + (g l² + 2 v² h) = 0
+    a = g * l**2
+    b = -2 * v**2 * l
+    c = g * l**2 + 2 * v**2 * h
+
+    discriminant = b**2 - 4 * a * c
+    if discriminant < 0:
+        raise ValueError("与えられた条件では解が存在しません（目標に届かないか、初速不足です）。")
+    
+    solutions = []
+    # 2 つの解（場合によっては重解となる）を求めます
+    for sign in [+1, -1]:
+        u = (-b + sign * np.sqrt(discriminant)) / (2 * a)  # u = tanθ
+        theta = np.arctan(u)  # 射出角 [rad]
+        cos_theta = np.cos(theta)
+        if np.abs(cos_theta) < 1e-8:
+            continue  # 実用的でない解は除外
+        # x方向は等速運動なので、到達時刻は t = l / (v cosθ)
+        t = l / (v * cos_theta)
+        solutions.append({
+            'launch_angle': theta,
+            'flight_time': t,
+        })
+
+    # 得られた解の中から、到達時刻が最も早い（tが最小の）解を選択
+    best_solution = min(solutions, key=lambda sol: sol['flight_time'])
+
+    return best_solution['launch_angle']
+
 def calc_launch_angles_with_drag(v, l, h):
+    """
+    初速 v [m/s] で斜方投射したとき、水平距離 l [m]、高さ h [m] の位置に到達するための
+    射出角 θ（ラジアン）を返す。
+    空気抵抗は考慮する。
+    
+    パラメータ:
+      v: 初速 [m/s]
+      l: 目標までの水平距離 [m]
+      h: 目標の高さ [m]
+      g: 重力加速度 [m/s^2]（デフォルトは 9.8）
+      
+    戻り値:
+      射出角θ [rad]
+    """
 
     # 入力パラメータ
     v0 = v      # 初速 [m/s]
@@ -207,7 +222,6 @@ def lookup_launch_angles_with_drag(v, l, h):
     """
     入力された初速 v、目標距離 l、目標高さ h に対して、
     ルックアップテーブルから射出角（ラジアン）を返す。
-    テーブルにない場合は、重い計算を直接実行する。
     """
     # 入力値をグローバルな刻み幅に合わせて丸める
     v_key = round(round((v - V_MIN) / V_STEP) * V_STEP + V_MIN, 5)
@@ -218,17 +232,19 @@ def lookup_launch_angles_with_drag(v, l, h):
     if key in lookup_table:
         return lookup_table[key]
     else:
-        # ルックアップテーブルに該当する値がない場合は直接計算
-        print("ルックアップテーブルにない組み合わせです。直接計算します。")
-        return calc_launch_angles_with_drag(v, l, h)
+        raise ValueError("ルックアップテーブルにない組み合わせです。")
 
 def calc_best_launch_angle(rpm, l, h):
+    """
+    入力された回転数 rpm、目標距離 l、目標高さ h に対して、
+    最適な射出角（ラジアン）を返す。
+    最適解がない場合には-1.0を返す。
+    """
     v = 2.0 * math.pi * ROLLER_RADIUS * rpm / 60.0
     try:
-        #launch_angle = calc_launch_angles(v, l, h)
         launch_angle = lookup_launch_angles_with_drag(v, l, h)
     except ValueError as e:
-        #print(e)
+        print(e)
         return -1.0
 
     return launch_angle
