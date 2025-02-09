@@ -132,7 +132,7 @@ def calc_launch_angles(v, l, h, g=9.8):
     # 得られた解の中から、到達時刻が最も早い（tが最小の）解を選択
     best_solution = min(solutions, key=lambda sol: sol['flight_time'])
 
-    return best_solution['launch_angle']
+    return best_solution
 
 def calc_launch_angles_with_drag(v, l, h):
     """
@@ -248,3 +248,14 @@ def calc_best_launch_angle(rpm, l, h):
         return -1.0
 
     return launch_angle
+
+def calc_flight_time(rpm, l, h):
+    v = 2.0 * math.pi * ROLLER_RADIUS * rpm / 60.0
+
+    try:
+        solution = calc_launch_angles(v, l, h)
+    except ValueError as e:
+        print(e)
+        return -1.0
+
+    return solution['flight_time']
