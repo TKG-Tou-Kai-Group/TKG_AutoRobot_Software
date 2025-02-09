@@ -92,7 +92,7 @@ class DamagePanelDetection:
 
         positive_mu_1 = -0.235 / 2
         positive_mu_2 = 0.235 / 2
-        positive_sigma = 0.02  # 標準偏差
+        positive_sigma = 0.03  # 標準偏差
 
         # Y方向の数列を生成
         x = np.linspace(-SCALE_Y/2, SCALE_Y/2, self.SIZE_Y)
@@ -108,7 +108,7 @@ class DamagePanelDetection:
 
 
         negative_mu = 0
-        negative_sigma = 0.06  # 標準偏差
+        negative_sigma = 0.03  # 標準偏差
 
         # Y方向の数列を生成
         negative_y = np.exp(-((x - negative_mu) ** 2) / (2 * negative_sigma ** 2))  # ガウス関数
