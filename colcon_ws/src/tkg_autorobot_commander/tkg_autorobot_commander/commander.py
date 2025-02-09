@@ -15,7 +15,7 @@ from tkg_autorobot_commander.damage_panel_detection import DamagePanelDetection
 import tkg_autorobot_commander.calc_launch_angle as calcurator
 
 class Auto(Node):
-    DEBUG = True
+    DEBUG = False
 
     def __init__(self):
         super().__init__('auto')
@@ -33,6 +33,7 @@ class Auto(Node):
 
         self.recog_fail_counter = 0
         self.attack_counter = 0
+        self.attack_wait_counter = 0
 
         self.next_id = 0
 
@@ -51,9 +52,9 @@ class Auto(Node):
         self.declare_parameter("enemy", "")
         enemy = self.get_parameter("enemy").value
         if enemy == "RED":
-            self.detector = DamagePanelDetection(15, 6, 255, 20, 8, 10)
+            self.detector = DamagePanelDetection(15, 8, 255, 20, 10, 15)
         elif enemy == "BLUE":
-            self.detector = DamagePanelDetection(90, 6, 255, 20, 8, 10)
+            self.detector = DamagePanelDetection(90, 8, 255, 20, 10, 15)
         else:
             self.get_logger().error(f"敵パラメータの指定が不正です。{enemy}")
             raise KeyboardInterrupt
@@ -176,13 +177,16 @@ class Auto(Node):
                     self.auto_mode = self.AUTO_MODE_TEST
 
         elif self.auto_mode == self.AUTO_MODE_TEST:
-            self.get_logger().info(f"TRACKING_MODE:")
+            self.get_logger().info(f"TEST_MODE:")
             # テストコード
             if not self.selected_target_id == -1:
                 self.roller_pub.publish(Float64(data=float(0.0)))
                 extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
+                target_yaw = math.atan2(self.target_list[self.selected_target_index].y, self.target_list[self.selected_target_index].x)
+                self.yaw_pub.publish(Float64(data=float(target_yaw)))
                 (detect_point_x, detect_point_y) = self.detector.detect(extract_image)
                 if detect_point_x >= 0 and detect_point_y >= 0:
+                    self.target_list[self.selected_target_index].state_checked_time = current_time
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
                     if self.depth_image is not None:
                         image_height, image_width, _ = self.image.shape
@@ -213,7 +217,7 @@ class Auto(Node):
                 self.pitch_pub.publish(Float64(data=float(target_pitch)))
                 if abs(target_yaw - current_yaw) <= math.radians(5.0) and abs(target_pitch - current_pitch) <= math.radians(5.0):
                     extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
-                    (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
+                    (detect_point_x, detect_point_y) = self.detector.detect(extract_image)
                     if detect_point_x >= 0 and detect_point_y >= 0: # 敵のダメージパネルを検出できた
                         (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
                         cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
@@ -225,8 +229,7 @@ class Auto(Node):
                         self.recog_fail_counter += 1
                         if self.recog_fail_counter > 10:
                             self.recog_fail_counter = 0
-                            # TODO: デバッグが済んだら、状態をOTHERに設定するようにする
-                            self.target_list[self.selected_target_index].state = Target.UNKNOWN #Target.OTHER
+                            self.target_list[self.selected_target_index].state = Target.OTHER
                             self.selected_target_id = -1
                     ros_image = self.bridge.cv2_to_imgmsg(result_image, encoding='bgr8')
                     self.object_image_pub.publish(ros_image)
@@ -241,9 +244,15 @@ class Auto(Node):
             # TODO: デバッグが済んだら、ローラを回転させる
             #self.roller_pub.publish(Float64(data=float(self.TARGET_RPM)))
             current_rpm = (abs(self.motor0_rpm) + abs(self.motor1_rpm)) / 2.0
+
+            if self.attack_wait_counter > 0:
+                self.attack_wait_counter += 1
+                if self.attack_wait_counter > int(2 * 30):
+                    self.attack_wait_counter = 0
+
             if not self.selected_target_id == -1:
                 extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
-                (detect_point_x, detect_point_y), color_extract_result = self.detector.detect(extract_image)
+                (detect_point_x, detect_point_y) = self.detector.detect(extract_image)
                 if detect_point_x >= 0 and detect_point_y >= 0: # 敵のダメージパネルを検出できた
                     (result_x, result_y) = self.extractor.convert_croped_point_to_image_point(detect_point_x, detect_point_y)
                     target_distance =  math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
@@ -269,21 +278,21 @@ class Auto(Node):
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
                     if target_pitch > math.radians(-8):
                         self.pitch_pub.publish(Float64(data=float(target_pitch)))
-                    angle_tolerance = math.atan2(0.05, damage_panel_distance)
+                    angle_tolerance = max(math.radians(0.5), math.atan2(0.075, damage_panel_distance))
                     if abs(target_yaw - current_yaw) <= angle_tolerance and abs(target_pitch - current_pitch) <= angle_tolerance and abs(current_rpm - self.TARGET_RPM) <= 100:
-                        self.hammer_pub.publish(Empty())
-                        self.mazemaze_pub.publish(Empty())
-                        self.attack_counter += 1
-                        if self.attack_counter >= 3:
-                            self.selected_target_id = -1
-                            self.attack_counter = 0
-                            self.auto_mode = self.AUTO_MODE_TRACKING
+                        if self.attack_wait_counter == 0:
+                            self.hammer_pub.publish(Empty())
+                            self.mazemaze_pub.publish(Empty())
+                            self.attack_counter += 1
+                            self.attack_wait_counter += 1
+                            if self.attack_counter >= 3:
+                                self.selected_target_id = -1
+                                self.attack_counter = 0
+                                self.auto_mode = self.AUTO_MODE_TRACKING
                 else:
                     # 目標の追跡を続ける
                     target_yaw = math.atan2(self.target_list[self.selected_target_index].y, self.target_list[self.selected_target_index].x)
-                    target_pitch = 0.0
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
-                    self.pitch_pub.publish(Float64(data=float(target_pitch)))
 
                     self.recog_fail_counter += 1
                     if self.recog_fail_counter > 10:
