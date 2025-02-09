@@ -7,6 +7,10 @@ class Target:
         self.id = input_id
         self.x = target_x
         self.y = target_y
+        self.vx = 0.0
+        self.vy = 0.0
+        self.ax = 0.0
+        self.ay = 0.0
         self.checked_time = input_checked_time
 
         self.state = self.UNKNOWN

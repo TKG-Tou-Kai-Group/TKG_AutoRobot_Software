@@ -15,7 +15,8 @@ from tkg_autorobot_commander.damage_panel_detection import DamagePanelDetection
 import tkg_autorobot_commander.calc_launch_angle as calcurator
 
 class Auto(Node):
-    DEBUG = False
+    DEBUG = True
+    USE_DEVIATION_SHOOTING = True
 
     def __init__(self):
         super().__init__('auto')
@@ -45,6 +46,9 @@ class Auto(Node):
         self.pitch_pub = self.create_publisher(Float64, "/pitch", 10)
 
         self.object_image_pub = self.create_publisher(Image, "/object_image", 10)
+
+        if self.DEBUG:
+            self.target_pose_pub = self.create_publisher(PoseArray, "/target_pose", 10)
 
         self.camera_mat = None
         self.dist_coeffs = None
@@ -76,6 +80,7 @@ class Auto(Node):
         self.selected_target_index = 0
         self.current_target_pose = Pose()
         self.timer_processing = False
+        self.stamp = self.get_clock().now()
         self.clusters_sub = self.create_subscription(PoseArray,'/clusters',self.clusters_callback,10)
 
         self.turret_data = Vector3()
@@ -120,7 +125,9 @@ class Auto(Node):
         current_yaw = self.turret_data.z
         current_pitch = self.turret_data.y
 
-        (current_time, _) = self.get_clock().now().seconds_nanoseconds()
+        diff_time_sec = (self.get_clock().now()-self.stamp).nanoseconds / 1000000000.0
+        self.stamp = self.get_clock().now()
+        (current_time, _) = self.stamp.seconds_nanoseconds()
         self.target_list = [target for target in self.target_list if (current_time - target.checked_time) < 3]
         for target in self.target_list:
             if not target.state == Target.UNKNOWN:
@@ -133,8 +140,20 @@ class Auto(Node):
             is_matched = False
             for target in self.target_list:
                 if math.sqrt((pose.position.x - target.x) ** 2 + (pose.position.y - target.y) ** 2) < 0.5:
+                    old_x = target.x
+                    old_y = target.y
+                    old_vx = target.vx
+                    old_vy = target.vy
                     target.x = pose.position.x
                     target.y = pose.position.y
+                    target.vx = (target.x - old_x) / diff_time_sec
+                    if abs(target.vx) > 0.8:
+                        target.vx = 0.0
+                    target.vy = (target.y - old_y) / diff_time_sec
+                    if abs(target.vy) > 0.8:
+                        target.vy = 0.0
+                    target.ax = (target.vx - old_vx) / diff_time_sec
+                    target.ay = (target.vy - old_vy) / diff_time_sec
                     target.checked_time = current_time
                     
                     is_matched = True
@@ -181,6 +200,21 @@ class Auto(Node):
             # テストコード
             if not self.selected_target_id == -1:
                 self.roller_pub.publish(Float64(data=float(0.0)))
+                # 偏差射撃に向けた計算
+                # あまり効果がみられなかったが実戦で使えそうならATTACKモードに実装する
+                if self.USE_DEVIATION_SHOOTING:
+                    delay_time = calcurator.calc_flight_time(self.TARGET_RPM, math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2), 0.0)
+                    target_x = self.target_list[self.selected_target_index].x + self.target_list[self.selected_target_index].vx * delay_time + 0.5 * self.target_list[self.selected_target_index].ax * (delay_time ** 2)
+                    target_y = self.target_list[self.selected_target_index].y + self.target_list[self.selected_target_index].vy * delay_time + 0.5 * self.target_list[self.selected_target_index].ay * (delay_time ** 2)
+                    pose_array = PoseArray()
+                    pose_array.header.frame_id = 'laser'
+                    pose_array.header.stamp = self.get_clock().now().to_msg()
+                    pose_msg = Pose()
+                    pose_msg.position.x = target_x - self.POSE_OFFSET_X
+                    pose_msg.position.y = target_y
+                    pose_msg.position.z = 0.0
+                    pose_array.poses.append(pose_msg)
+                    self.target_pose_pub.publish(pose_array)
                 extract_image, result_image = self.extractor.extract(self.image, self.target_list[self.selected_target_index].x, self.target_list[self.selected_target_index].y, current_pitch, current_yaw, (256, 128))
                 target_yaw = math.atan2(self.target_list[self.selected_target_index].y, self.target_list[self.selected_target_index].x)
                 self.yaw_pub.publish(Float64(data=float(target_yaw)))
@@ -199,6 +233,20 @@ class Auto(Node):
                     else:
                         target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
                     damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, target_distance)
+                    if self.USE_DEVIATION_SHOOTING:
+                        flight_time = calcurator.calc_flight_time(self.TARGET_RPM, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
+                        damage_panel_position[0] += self.target_list[self.selected_target_index].vx * flight_time + 0.5 * self.target_list[self.selected_target_index].ax * (flight_time ** 2)
+                        damage_panel_position[1] += self.target_list[self.selected_target_index].vy * flight_time + 0.5 * self.target_list[self.selected_target_index].ay * (flight_time ** 2)
+                    self.get_logger().info(f"{damage_panel_position}")
+                    #pose_array = PoseArray()
+                    #pose_array.header.frame_id = 'laser'
+                    #pose_array.header.stamp = self.get_clock().now().to_msg()
+                    #pose_msg = Pose()
+                    #pose_msg.position.x = damage_panel_position[0] - self.POSE_OFFSET_X
+                    #pose_msg.position.y = damage_panel_position[1]
+                    #pose_msg.position.z = damage_panel_position[2]
+                    #pose_array.poses.append(pose_msg)
+                    #self.target_pose_pub.publish(pose_array)
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
                     target_pitch = calcurator.calc_best_launch_angle(self.TARGET_RPM, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
                     #self.get_logger().info(f"damage_panel_position: {damage_panel_position}")
@@ -268,6 +316,10 @@ class Auto(Node):
                         target_distance = math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
 
                     damage_panel_position = self.extractor.convert_image_point_to_target_point(result_x, result_y, target_distance)
+                    if self.USE_DEVIATION_SHOOTING:
+                        flight_time = calcurator.calc_flight_time(current_rpm, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
+                        damage_panel_position[0] += self.target_list[self.selected_target_index].vx * flight_time + 0.5 * self.target_list[self.selected_target_index].ax * (flight_time ** 2)
+                        damage_panel_position[1] += self.target_list[self.selected_target_index].vy * flight_time + 0.5 * self.target_list[self.selected_target_index].ay * (flight_time ** 2)
                     self.get_logger().info(f"{damage_panel_position}")
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
 
