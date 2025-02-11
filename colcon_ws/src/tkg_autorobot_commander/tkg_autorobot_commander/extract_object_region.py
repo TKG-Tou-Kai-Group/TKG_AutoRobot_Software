@@ -14,7 +14,7 @@ class ExtractObject:
 
     target_x = 3.0
     target_y = 0.0
-    target_z = 0.38
+    target_z = 0.38 # 砲塔高さ 0.36
     target_width = 1.2
     target_height = 0.5 # 0.26
     

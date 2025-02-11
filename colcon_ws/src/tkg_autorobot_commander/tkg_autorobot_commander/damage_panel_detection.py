@@ -74,9 +74,9 @@ class DamagePanelDetection:
         matching_result = matching_template(mask, self.positive_template, self.negative_template)
         _, max_val, _, max_loc = cv2.minMaxLoc(matching_result)
         # TODO: しきい値の調整は必須
-        threashold = 2500000000000.0
+        threashold = 1800000000000.0
         if self.DEBUG:
-            print(f"最大値: {max_val}, しきい値：{threashold}, 位置: {max_loc}")
+            print(f"最大値: {max_val}, しきい値：{threashold}, 位置: {max_loc}, 判定率: {max_val / threashold * 100}")
         if max_val < threashold:
             return (-1, -1)
         else:
@@ -85,9 +85,9 @@ class DamagePanelDetection:
     def make_template(self):
 
         # パラメータ設定
-        SCALE_X = 0.1
-        SCALE_Y = 0.3
-        self.SIZE_Y = 64
+        SCALE_X = 0.2
+        SCALE_Y = 0.4
+        self.SIZE_Y = 86
         self.SIZE_X = int(self.SIZE_Y / SCALE_Y * SCALE_X)
 
         positive_mu_1 = -0.235 / 2
@@ -104,21 +104,36 @@ class DamagePanelDetection:
         positive_y = positive_y.reshape((self.SIZE_Y, 1))  # (SIZE_Y, 1) に変形
 
         # 横方向に繰り返して (SIZE_Y, SIZE_X) の画像を生成
-        self.positive_template = np.tile(positive_y, (1, self.SIZE_X))
+        self.positive_template = np.tile(positive_y, (1, self.SIZE_X // 2))
+        self.positive_template = np.concatenate([np.zeros((self.SIZE_Y, self.SIZE_X // 4), float), self.positive_template, np.zeros((self.SIZE_Y, self.SIZE_X // 4), float)], 1)
 
 
         negative_mu = 0
         negative_sigma = 0.03  # 標準偏差
+        negative_mu_1 = -SCALE_Y/2
+        negative_mu_2 =  SCALE_Y/2
+        negative_mu_3 = -SCALE_X/2
+        negative_mu_4 =  SCALE_X/2
+        negative_sigma_2 = 0.02  # 標準偏差
 
         # Y方向の数列を生成
         negative_y = np.exp(-((x - negative_mu) ** 2) / (2 * negative_sigma ** 2))  # ガウス関数
-        negative_y = (negative_y * 255)
+        negative_y_1 = np.exp(-((x - negative_mu_1) ** 2) / (2 * negative_sigma_2 ** 2))  # ガウス関数
+        negative_y_2 = np.exp(-((x - negative_mu_2) ** 2) / (2 * negative_sigma_2 ** 2))  # ガウス関数
+        negative_y = (negative_y + negative_y_1 + negative_y_2) * 255
+
+        # X方向の数列を生成
+        y = np.linspace(-SCALE_X/2, SCALE_X/2, self.SIZE_X)
+        negative_x_1 = np.exp(-((y - negative_mu_3) ** 2) / (2 * negative_sigma_2 ** 2))  # ガウス関数
+        negative_x_2 = np.exp(-((y - negative_mu_4) ** 2) / (2 * negative_sigma_2 ** 2))  # ガウス関数
+        negative_x = (negative_x_1 + negative_x_2) * 255
+        negative_x = negative_x.reshape((1, self.SIZE_X))
 
         # 縦ベクトル化
         negative_y = negative_y.reshape((self.SIZE_Y, 1))  # (SIZE_Y, 1) に変形
 
         # 横方向に繰り返して (SIZE_Y, SIZE_X) の画像を生成
-        self.negative_template = np.tile(negative_y, (1, self.SIZE_X))
+        self.negative_template = np.tile(negative_y, (1, self.SIZE_X)) + np.tile(negative_x, (self.SIZE_Y, 1))
 
     def get_detect_result(self):
         return self.detect_result
