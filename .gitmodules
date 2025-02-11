@@ -7,3 +7,6 @@
 [submodule "colcon_ws/src/tkg_autorobot_controller"]
 	path = colcon_ws/src/tkg_autorobot_controller
 	url = https://github.com/TKG-Tou-Kai-Group/tkg_autorobot_controller.git
+[submodule "colcon_ws/src/tkg_catch_ball_launcher"]
+	path = colcon_ws/src/tkg_catch_ball_launcher
+	url = https://github.com/TKG-Tou-Kai-Group/tkg_catch_ball_launcher.git
