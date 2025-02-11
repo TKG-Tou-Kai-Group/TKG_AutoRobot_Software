@@ -306,7 +306,7 @@ class Auto(Node):
                     target_distance =  math.sqrt(self.target_list[self.selected_target_index].x ** 2 + self.target_list[self.selected_target_index].y ** 2)
                     if self.depth_image is not None:
                         image_height, image_width, _ = self.image.shape
-                        depth_image_height, depth_image_width, _ = self.image.shape
+                        depth_image_height, depth_image_width = self.depth_image.shape
                         depth_x = int(result_x * depth_image_width / image_width)
                         depth_y = int(result_y * depth_image_height / image_height)
                         target_distance = self.depth_image[depth_y, depth_x] / 1000.0
