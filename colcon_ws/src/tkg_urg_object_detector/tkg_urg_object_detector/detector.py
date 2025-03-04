@@ -9,16 +9,10 @@ from numba import jit
 @jit(nopython=True, cache=True)
 def cluster_points(ranges, first_scan, angle_min, angle_increment):
     initial_clusters = []
-    current_cluster_size = 0
-    x_sum = 0.0
-    y_sum = 0.0
-    first_x = 0.0
-    first_y = 0.0
-    current_x = -1.0
-    current_y = -1.0
     is_near_first_scan = False
     x_ref = 0.0
     y_ref = 0.0
+    target_radius_max = 0.6
 
     for i in range(len(ranges)):
         # 最大距離は射程範囲に合わせて調整
@@ -66,29 +60,45 @@ def cluster_points(ranges, first_scan, angle_min, angle_increment):
     # すべてのスキャン処理が終わった後に、点の数が4以上のクラスタのみを残す
     initial_clusters = [cluster for cluster in initial_clusters if cluster[3] > 3]
 
-    clusters = []
-    current_i = 0
-    is_cluster_detected = False
-    for i in range(len(initial_clusters)):
-        a = initial_clusters[current_i]
-        b = initial_clusters[i]
-        cluster_size = a[2] + b[2] + math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
-        if (cluster_size >= 1.2 and i >= 1):
-            b = initial_clusters[i-1]
-            is_cluster_detected = True
-        if i == len(initial_clusters)-1:
-            b = initial_clusters[i]
-            is_cluster_detected = True
-        if is_cluster_detected:
-            cluster_x = (a[0] + b[0]) / 2.0
-            cluster_y = (a[1] + b[1]) / 2.0
-            cluster_radius = (a[2] + b[2] + math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)) / 2.0
-            if cluster_radius >= 0.15 and cluster_radius <= 0.6:
-                clusters.append([cluster_x, cluster_y, cluster_radius])
-            is_cluster_detected = False
-            current_i = i
 
-    return clusters
+    merged = initial_clusters.copy()
+    changed = True
+
+    while changed and len(merged) > 1:
+        changed = False
+        num = len(merged)
+        best_pair = None
+        best_distance = float('inf')
+        # すべてのペアの中心間距離を計算
+        for i in range(num):
+            for j in range(i+1, num):
+                d = math.sqrt((merged[i][0] - merged[j][0])**2 + (merged[i][1] - merged[j][1])**2)
+                if d < best_distance:
+                    best_distance = d
+                    best_pair = (i, j)
+        if best_pair is not None:
+            i, j = best_pair
+            # マージ後のクラスタのパラメータを計算
+            count = merged[i][3] + merged[j][3]
+            new_x = (merged[i][0] * merged[i][3] + merged[j][0] * merged[j][3]) / count
+            new_y = (merged[i][1] * merged[i][3] + merged[j][1] * merged[j][3]) / count
+            # 各クラスタの中心から新しい重心までの距離に、それぞれの半径を加えたものの最大値を新半径とする
+            r_i = math.sqrt((merged[i][0] - new_x)**2 + (merged[i][1] - new_y)**2) + merged[i][2]
+            r_j = math.sqrt((merged[j][0] - new_x)**2 + (merged[j][1] - new_y)**2) + merged[j][2]
+            new_radius = max(r_i, r_j)
+            # マージ判定：新たな半径が目標上限以下、またはペアの中心間距離が非常に小さい場合はマージする
+            if new_radius <= target_radius_max or best_distance < 0.1:
+                merged_cluster = [new_x, new_y, new_radius, count]
+                # マージ済みのクラスタをリストから除去し、マージクラスタを追加
+                new_merged = []
+                for k in range(num):
+                    if k not in best_pair:
+                        new_merged.append(merged[k])
+                new_merged.append(merged_cluster)
+                merged = new_merged
+                changed = True
+    return merged
+
 
 class ScanProcessor(Node):
     def __init__(self):
