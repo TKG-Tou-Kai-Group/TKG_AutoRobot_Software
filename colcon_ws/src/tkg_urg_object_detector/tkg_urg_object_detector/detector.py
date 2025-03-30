@@ -60,6 +60,8 @@ def cluster_points(ranges, first_scan, angle_min, angle_increment):
     # すべてのスキャン処理が終わった後に、点の数が4以上のクラスタのみを残す
     initial_clusters = [cluster for cluster in initial_clusters if cluster[3] > 3]
 
+    return initial_clusters
+
 
     merged = initial_clusters.copy()
     changed = True

@@ -74,7 +74,8 @@ class DamagePanelDetection:
         matching_result = matching_template(mask, self.positive_template, self.negative_template)
         _, max_val, _, max_loc = cv2.minMaxLoc(matching_result)
         # TODO: しきい値の調整は必須
-        threashold = 1800000000000.0
+        #threashold = 1800000000000.0
+        threashold = 630000000000.0 / 200.0
         if self.DEBUG:
             print(f"最大値: {max_val}, しきい値：{threashold}, 位置: {max_loc}, 判定率: {max_val / threashold * 100}")
         if max_val < threashold:

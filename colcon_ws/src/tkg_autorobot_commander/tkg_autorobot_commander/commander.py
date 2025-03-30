@@ -15,7 +15,7 @@ from tkg_autorobot_commander.damage_panel_detection import DamagePanelDetection
 import tkg_autorobot_commander.calc_launch_angle as calcurator
 
 class Auto(Node):
-    DEBUG = True
+    DEBUG = False
     USE_DEVIATION_SHOOTING = True
 
     def __init__(self):
@@ -25,6 +25,7 @@ class Auto(Node):
         self.POSE_OFFSET_X = 0.3
         self.POSE_OFFSET_Y = 0.0
         self.TARGET_RPM = 6000
+        self.RPM_OFFSET = 500
 
         self.AUTO_MODE_INIT = 0
         self.AUTO_MODE_TRACKING = 1
@@ -56,9 +57,9 @@ class Auto(Node):
         self.declare_parameter("enemy", "")
         enemy = self.get_parameter("enemy").value
         if enemy == "RED":
-            self.detector = DamagePanelDetection(15, 8, 255, 20, 10, 15)
+            self.detector = DamagePanelDetection(15, 8, 255, 20, 50, 25)
         elif enemy == "BLUE":
-            self.detector = DamagePanelDetection(90, 8, 255, 20, 10, 15)
+            self.detector = DamagePanelDetection(90, 8, 255, 20, 50, 20)
         else:
             self.get_logger().error(f"敵パラメータの指定が不正です。{enemy}")
             raise KeyboardInterrupt
@@ -173,7 +174,7 @@ class Auto(Node):
                     if distance < min_distance:
                         min_distance = distance
                         self.selected_target_id = target.id
-        self.get_logger().info(f"{len(self.target_list)}: {self.target_list}")
+        #self.get_logger().info(f"{len(self.target_list)}: {self.target_list}")
 
         # 対象が選択されているとき、現在の対象のインデックス番号を取得
         if not self.selected_target_id == -1:
@@ -197,9 +198,9 @@ class Auto(Node):
 
         elif self.auto_mode == self.AUTO_MODE_TEST:
             self.get_logger().info(f"TEST_MODE:")
+            self.roller_pub.publish(Float64(data=float(self.TARGET_RPM)))
             # テストコード
             if not self.selected_target_id == -1:
-                self.roller_pub.publish(Float64(data=float(0.0)))
                 # 偏差射撃に向けた計算
                 # あまり効果がみられなかったが実戦で使えそうならATTACKモードに実装する
                 if self.USE_DEVIATION_SHOOTING:
@@ -252,12 +253,13 @@ class Auto(Node):
                     #self.get_logger().info(f"damage_panel_position: {damage_panel_position}")
                     #self.get_logger().info(f"target_yaw: {target_yaw}, target_pitch: {target_pitch}")
                     cv2.drawMarker(result_image, (int(result_x), int(result_y)), (0, 255, 0), thickness=3)
+                result_image = self.detector.get_detect_result()
                 ros_image = self.bridge.cv2_to_imgmsg(result_image, encoding='bgr8')
                 self.object_image_pub.publish(ros_image)
 
         elif self.auto_mode == self.AUTO_MODE_TRACKING:
             self.get_logger().info(f"TRACKING_MODE:")
-            self.roller_pub.publish(Float64(data=float(0.0)))
+            self.roller_pub.publish(Float64(data=float(self.TARGET_RPM)))
             if not self.selected_target_id == -1:
                 target_yaw = math.atan2(self.target_list[self.selected_target_index].y, self.target_list[self.selected_target_index].x)
                 target_pitch = 0.0
@@ -275,7 +277,7 @@ class Auto(Node):
                         self.auto_mode = self.AUTO_MODE_ATTACK
                     else:
                         self.recog_fail_counter += 1
-                        if self.recog_fail_counter > 10:
+                        if self.recog_fail_counter > 30: # 1秒分
                             self.recog_fail_counter = 0
                             self.target_list[self.selected_target_index].state = Target.OTHER
                             self.selected_target_id = -1
@@ -289,8 +291,6 @@ class Auto(Node):
 
         elif self.auto_mode == self.AUTO_MODE_ATTACK:
             self.get_logger().info(f"ATTACK_MODE:")
-            # TODO: デバッグが済んだら、ローラを回転させる
-            #self.roller_pub.publish(Float64(data=float(self.TARGET_RPM)))
             current_rpm = (abs(self.motor0_rpm) + abs(self.motor1_rpm)) / 2.0
 
             if self.attack_wait_counter > 0:
@@ -326,11 +326,11 @@ class Auto(Node):
                     self.target_list[self.selected_target_index].state = Target.ENEMY
                     target_yaw = math.atan2(damage_panel_position[1], damage_panel_position[0])
                     damage_panel_distance =  math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2)
-                    target_pitch = calcurator.calc_best_launch_angle(current_rpm, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
+                    target_pitch = calcurator.calc_best_launch_angle(current_rpm + self.RPM_OFFSET, math.sqrt(damage_panel_position[0] ** 2 + damage_panel_position[1] ** 2), damage_panel_position[2])
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
                     if target_pitch > math.radians(-8):
                         self.pitch_pub.publish(Float64(data=float(target_pitch)))
-                    angle_tolerance = max(math.radians(0.5), math.atan2(0.075, damage_panel_distance))
+                    angle_tolerance = max(math.radians(1.0), math.atan2(0.075, damage_panel_distance))
                     if abs(target_yaw - current_yaw) <= angle_tolerance and abs(target_pitch - current_pitch) <= angle_tolerance and abs(current_rpm - self.TARGET_RPM) <= 100:
                         if self.attack_wait_counter == 0:
                             self.hammer_pub.publish(Empty())
@@ -347,7 +347,7 @@ class Auto(Node):
                     self.yaw_pub.publish(Float64(data=float(target_yaw)))
 
                     self.recog_fail_counter += 1
-                    if self.recog_fail_counter > 10:
+                    if self.recog_fail_counter > 2 * 30: # 2秒分
                         self.target_list[self.selected_target_index].state = Target.UNKNOWN
                         self.selected_target_id = -1
                         self.attack_counter = 0
